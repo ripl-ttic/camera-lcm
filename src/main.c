@@ -111,7 +111,7 @@ static inline gboolean camunits_plugin_path_set()
     return camunits && strlen(camunits) > 0;
 }
 
-static void usage(const char *name, BotParam *param)
+static void usage(const char *name)
 {
     printf("%s: Publish camera images to LCM.\n"
            "\n"
@@ -128,6 +128,8 @@ static void usage(const char *name, BotParam *param)
            "            Omit all camera streams with the names in the comma-\n"
            "            separated list of keys.  If a key does not exist, this\n"
            "            a warning will be generated.\n"
+           "        -g --get camera-names\n"
+           "            Display camera names from param server\n."
            "        -v --verbose\n"
            "            Run verbosely.\n"
            "        -h --help\n"
@@ -141,6 +143,17 @@ static void usage(const char *name, BotParam *param)
     //    printf("        %s\n", cameras[i]);
     //printf("\n");
     //g_strfreev(cameras);
+}
+
+
+static void print_camera_names(BotParam *param)
+{
+    char **cameras = bot_param_get_subkeys(param, "cameras");
+    printf("    <cam-name> can be any one of:\n");
+    for (int i = 0; cameras[i]; i++)
+        printf("        %s\n", cameras[i]);
+    printf("\n");
+    g_strfreev(cameras);
 }
 
 
@@ -193,10 +206,11 @@ int main (int argc, char *argv[])
 
     state_t *self = (state_t *) calloc (1, sizeof (state_t));
     
-    char *optstring = "hvc:s:o:";
+    char *optstring = "hvgc:s:o:";
     struct option long_opts[] =
     {
         { "help",    no_argument, NULL, 'h' },
+        { "get-camera-names",    no_argument, NULL, 'g' },
         { "verbose", no_argument, NULL, 'v' },
 
         // Cameras:
@@ -215,17 +229,19 @@ int main (int argc, char *argv[])
 
     gchar **omits = NULL;
 
+    int display_camera_names = 0;
+
     int c;
     DBG("Parsing args.\n");
     while ((c = getopt_long(argc, argv, optstring, long_opts, 0)) >= 0)
     {
         switch (c)
         {
-            case '?': return;
+            case '?': 
+                return 1;
 
             // Minor alterations.
             case 'v':
-                fprintf(stdout, "Got 'v'\n");
                 self->verbose = TRUE;
                 break;
             case 'o':
@@ -236,8 +252,8 @@ int main (int argc, char *argv[])
             // Camera selection.
             case 's':
                 fprintf (stdout, "Simulated camera mode currently not supported\n");
-                camera_help (argv[0], self->param);
-                return;
+                usage (argv[0]);
+                return -1;
                 self->simulated = TRUE;
                 self->cam_name = optarg;
                 //LOG("Got camera parameter \"%s\".\n", optarg);
@@ -246,13 +262,15 @@ int main (int argc, char *argv[])
                 self->cam_name = optarg;
                 //LOG("Got camera parameter \"%s\".\n", optarg);
                 break;
-
+            case 'g':
+                display_camera_names = 1;
+                break;
             default:
                 fprintf(stderr, "Unrecognized option???\n");
             case 'h':
                 printf("Help message.\n");
-                camera_help(argv[0], self->param);
-                return;
+                usage(argv[0]);
+                return 0;
         }
     }
 
@@ -261,6 +279,18 @@ int main (int argc, char *argv[])
 
     // Instantiate the BotParam client
     self->param = bot_param_new_from_server (self->lcm, 0);
+
+    if (!self->param) {
+        fprintf (stderr, "Unable to get param instance");
+        free (self);
+        return -1;
+    }
+
+    if (display_camera_names) {
+        print_camera_names (self->param);
+        free(self);
+        return 1;
+    }
 
 
     if (self->cam_name)
@@ -272,10 +302,9 @@ int main (int argc, char *argv[])
         // Get all the sub-keys.
         stream_keys = bot_param_get_subkeys(self->param, cam_key);
 
-        if (!stream_keys)
-        {
+        if (!stream_keys) {
             ERR("Could not find configuration for \"%s\"\n", cam_key);
-            return;
+            return -1;
         }
 
         // Remove all keys that are in the ?? - wht matt???
@@ -317,16 +346,14 @@ int main (int argc, char *argv[])
         }
         g_strfreev(stream_keys);
 
-        if (!self->streams)
-        {
+        if (!self->streams) {
             printf("No streams to stream!  Aborting.\n");
-            return;
+            return -1;
         }
 
         // And finally, the XML file containing the camunits source
         // chain (the one connecting to the camera).
-        if (self->simulated)
-        {
+        if (self->simulated) {
             key = (char*)calloc(strlen(cam_key) + 19, sizeof(char));
             sprintf(key, "%s.cam_units_sim_xml", cam_key);
         }
@@ -336,10 +363,9 @@ int main (int argc, char *argv[])
             sprintf(key, "%s.cam_units_xml", cam_key);
         }
 
-        if (bot_param_get_str(self->param, key, &rtn))
-        {
+        if (bot_param_get_str(self->param, key, &rtn)) {
             fprintf(stderr, "Could not get cam_units_xml.\n");
-            return;
+            return -1;
         }
 
         const char *config_dir = getConfigPath();
@@ -353,10 +379,9 @@ int main (int argc, char *argv[])
     }
 
 
-    if (self->simulated && !camunits_plugin_path_set())
-    {
+    if (self->simulated && !camunits_plugin_path_set()) {
         printf("CAMUNITS_PLUGIN_PATH environment variable is not set.  Set it and rerun this.\n");
-        return;
+        return -1;
     }
 
     if (self->verbose)
@@ -366,10 +391,9 @@ int main (int argc, char *argv[])
             stream_print_info((stream_t*)iter->data);
     }
 
-    if (!self->cam_name)
-    {
+    if (!self->cam_name) {
         fprintf(stderr, "No camera input specified!\n");
-        return;
+        return -1;
     }
 
     // Create the chain from the contents of a file.
@@ -379,12 +403,11 @@ int main (int argc, char *argv[])
     gchar *xml = NULL;
     GError *error = NULL;
     g_file_get_contents(file_name, &xml, &length, &error);
-    if (error)
-    {
+    if (error) {
         ERR("Could not get contents of file: %s\n%s\n", file_name, error->message);
         g_error_free(error);
         free(file_name);
-        return;
+        return -1;
     }
     free(file_name);
 
@@ -451,7 +474,7 @@ int main (int argc, char *argv[])
                             self->manager, __name__))) { \
                 ERR("Could not create %s unit for %s stream!\n", \
                         __name__, stream->key_name); \
-                return; \
+                return -1; \
             } \
         } while (0)
 
