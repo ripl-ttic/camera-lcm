@@ -10,7 +10,7 @@
 
 #include <bot_core/bot_core.h>
 #include <bot_param/param_client.h>
-#include <hr_common/path_util.h>
+#include <path_utils/path_util.h>
 
 //#include <lcmtypes/lcmtypes.h>
 
