@@ -1,5 +1,5 @@
 add_definitions(
-    #-ggdb3 
+    #-ggdb3
     -std=gnu99
     )
 
@@ -16,10 +16,10 @@ pods_use_pkg_config_packages(hr-camera
     glib-2.0
     gobject-2.0
     gthread-2.0
-    lcm 
-    bot2-core 
+    lcm
+    bot2-core
     bot2-param-client
     camunits
-    hr-path-util)
+    path-utils)
 
 pods_install_executables(hr-camera)
