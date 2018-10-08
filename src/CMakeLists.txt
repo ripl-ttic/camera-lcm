@@ -8,11 +8,11 @@ include_directories(
     ${LCMTYPES_INCLUDE_DIRS}
     )
 
-add_executable(hr-camera main.c)
+add_executable(camera-stream main.c)
 
-target_link_libraries (hr-camera ${LCMTYPES_LIBS})
+target_link_libraries (camera-stream ${LCMTYPES_LIBS})
 
-pods_use_pkg_config_packages(hr-camera
+pods_use_pkg_config_packages(camera-stream
     glib-2.0
     gobject-2.0
     gthread-2.0
@@ -22,4 +22,4 @@ pods_use_pkg_config_packages(hr-camera
     camunits
     path-utils)
 
-pods_install_executables(hr-camera)
+pods_install_executables(camera-stream)
